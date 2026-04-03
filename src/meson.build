@@ -190,6 +190,7 @@ if host_machine.system() == 'darwin'
         'osx/osx_utils.mm',
         'osx/retina_helper.mm',
         'osx/scintilla_ime.mm',
+        'osx/screenpicker.mm',
     )
 elif host_machine.system() == 'windows'
     aegisub_src += files(
