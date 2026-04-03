@@ -62,7 +62,7 @@
 #include <wx/textctrl.h>
 
 #ifdef __WXMAC__
-#include <ApplicationServices/ApplicationServices.h>
+namespace osx { void DropFromScreen(int x, int y, int resx, int resy, int magnification, wxMemoryDC &capdc); }
 #endif
 
 namespace {
@@ -393,30 +393,8 @@ namespace {
 			screen.get(), x - resx / 2, y - resy / 2, resx, resy
 		);
 		#else
-	// wxScreenDC doesn't work on recent versions of OS X so do it manually
-
-	// Doesn't bother handling the case where the rect overlaps two monitors
-	CGDirectDisplayID display_id;
-	uint32_t display_count;
-	CGGetDisplaysWithPoint(CGPointMake(x, y), 1, &display_id, &display_count);
-
-	agi::scoped_holder<CGImageRef> img(CGDisplayCreateImageForRect(display_id, CGRectMake(x - resx / 2, y - resy / 2, resx, resy)), CGImageRelease);
-	size_t width = CGImageGetWidth(img);
-	size_t height = CGImageGetHeight(img);
-	std::vector<uint8_t> imgdata(height * width * 4);
-
-	agi::scoped_holder<CGColorSpaceRef> colorspace(CGColorSpaceCreateDeviceRGB(), CGColorSpaceRelease);
-	agi::scoped_holder<CGContextRef> bmp_context(CGBitmapContextCreate(&imgdata[0], width, height, 8, 4 * width, colorspace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big), CGContextRelease);
-
-	CGContextDrawImage(bmp_context, CGRectMake(0, 0, width, height), img);
-
-	for (int x = 0; x < resx; x++) {
-		for (int y = 0; y < resy; y++) {
-			uint8_t *pixel = &imgdata[y * width * 4 + x * 4];
-			capdc.SetBrush(wxBrush(wxColour(pixel[0], pixel[1], pixel[2])));
-			capdc.DrawRectangle(x * magnification, y * magnification, magnification, magnification);
-		}
-	}
+		// wxScreenDC doesn't work on OS X so do it manually
+		osx::DropFromScreen(x, y, resx, resy, magnification, capdc);
 		#endif
 
 		Refresh(false);
