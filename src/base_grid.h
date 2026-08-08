@@ -66,7 +66,6 @@ class BaseGrid final : public wxWindow {
 
 	std::unique_ptr<WidthHelper> width_helper;
 
-	wxBitmap paint_buffer_;  ///< 持久化绘图缓冲区，避免每次 OnPaint 重新分配
 
 	/// Rows which are visible on the current video frame
 	std::vector<int> visible_rows;

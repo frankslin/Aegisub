@@ -334,33 +334,28 @@ void BaseGrid::FollowVideoLine() {
 }
 
 void BaseGrid::OnPaint(wxPaintEvent &) {
-	// Find which columns need to be repainted
+	// The whole buffer is cleared further down, so every column has to be
+	// repainted: restricting painting to the update region would leave the
+	// rest of the buffer as blank background. wxOSX hands out fine-grained
+	// update regions, which made the grid show only a single row with the
+	// style and text columns empty.
+	//
+	// Zero-width columns stay unpainted: they are the collapsed ones (actor,
+	// effect, margins), and drawing their headers would stack every label on
+	// the same x position.
 	std::vector<char> paint_columns;
-	paint_columns.resize(columns.size(), false);
-	bool any = false;
-	for (wxRegionIterator region(GetUpdateRegion()); region; ++region) {
-		wxRect updrect = region.GetRect();
-		int x = 0;
-		for (size_t i : agi::util::range(columns.size())) {
-			int width = columns[i]->Width();
-			if (width && updrect.x < x + width && updrect.x + updrect.width > x) {
-				paint_columns[i] = true;
-				any = true;
-			}
-			x += width;
-		}
-	}
-
-	if (!any) return;
+	paint_columns.resize(columns.size());
+	for (size_t i : agi::util::range(columns.size()))
+		paint_columns[i] = columns[i]->Width() > 0;
 
 	int w = 0;
 	int h = 0;
 	GetClientSize(&w,&h);
 
-	// 保持绘图缓冲区与客户区同尺寸，使用持久化缓冲区避免重复分配
-	if (!paint_buffer_.IsOk() || paint_buffer_.GetWidth() != w || paint_buffer_.GetHeight() != h)
-		paint_buffer_.Create(w, h);
-	wxBufferedPaintDC dc(this, paint_buffer_);
+	// A persistent 1x wxBitmap buffer does not survive HiDPI: the rows get laid
+	// out in logical points and then composited onto a 2x window. Let wx manage
+	// the buffer so it picks up the window's content scale factor.
+	wxAutoBufferedPaintDC dc(this);
 	dc.SetFont(font);
 
 	w -= scrollBar->GetSize().GetWidth();
@@ -420,11 +415,7 @@ void BaseGrid::OnPaint(wxPaintEvent &) {
 	auto const& selection = context->selectionController->GetSelectedSet();
 	visible_rows.clear();
 
-	// 获取更新区域包围盒，用于行级裁剪
 	const bool highlight_enabled = OPT_GET("Subtitle/Grid/Highlight Subtitles in Frame")->GetBool();
-	wxRect updateBox = GetUpdateRegion().GetBox();
-	int updateTop = updateBox.y;
-	int updateBottom = updateBox.y + updateBox.height;
 
 	for (int i : agi::util::range(nDraw)) {
 		AssDialogue *curDiag = vis_index_line_map[i + yPos];
@@ -434,10 +425,6 @@ void BaseGrid::OnPaint(wxPaintEvent &) {
 		bool is_displayed = highlight_enabled && IsDisplayed(curDiag);
 		if (is_displayed)
 			visible_rows.push_back(i + yPos);
-
-		// 行级裁剪：跳过更新区域外的行以减少绘制开销
-		if (y + lineHeight < updateTop || y > updateBottom)
-			continue;
 
 		wxBrush color = row_colors.Default;
 		bool inSel = !!selection.count(curDiag);
