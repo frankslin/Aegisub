@@ -554,7 +554,11 @@ namespace {
 			}
 		}
 
+#ifdef _WIN32
 		FILE* output_file = _wfopen(outputPath.c_str(), L"wb");
+#else
+		FILE* output_file = fopen(wxString(outputPath).utf8_str(), "wb");
+#endif
 		if (!output_file) {
 			int err = errno;
 			wxLogError("Failed to open output file for writing: %s (errno=%d: %s)",
