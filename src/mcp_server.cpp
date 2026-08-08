@@ -1925,7 +1925,11 @@ UnknownElement HandleExportGif(Object const& args) {
 				throw std::runtime_error("failed to create output directory: " + ec.message());
 		}
 	}
+#ifdef _WIN32
 	FILE* output_file = _wfopen(wxString::FromUTF8(path).wc_str(), L"wb");
+#else
+	FILE* output_file = fopen(path.c_str(), "wb");
+#endif
 	if (!output_file)
 		throw std::runtime_error("failed to open output file for writing");
 	guard.f = output_file;

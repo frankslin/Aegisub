@@ -23,6 +23,10 @@
 
 #include <libaegisub/fs.h>
 
+#ifdef __APPLE__
+#include <CoreText/CoreText.h>
+#endif
+
 namespace font_manager {
 
 namespace {
@@ -89,6 +93,7 @@ void CollectFontFiles(const agi::fs::path &entry, std::vector<agi::fs::path> &ou
 	}
 }
 
+#ifdef _WIN32
 bool RegisterFontFile(const agi::fs::path &file, int &out_count) {
 	out_count = AddFontResourceEx(file.wstring().c_str(), FR_PRIVATE, nullptr);
 	const DWORD last_err = out_count ? 0 : GetLastError();
@@ -101,6 +106,52 @@ bool RegisterFontFile(const agi::fs::path &file, int &out_count) {
 void UnregisterFontFile(const agi::fs::path &file) {
 	RemoveFontResourceExW(file.wstring().c_str(), FR_PRIVATE, nullptr);
 }
+#elif defined(__APPLE__)
+// CoreText equivalent of AddFontResourceEx: register the font for this process only
+CFURLRef MakeFileURL(const agi::fs::path &file) {
+	const std::string path = file.string();
+	return CFURLCreateFromFileSystemRepresentation(
+		nullptr, reinterpret_cast<const UInt8 *>(path.data()),
+		static_cast<CFIndex>(path.size()), false);
+}
+
+bool RegisterFontFile(const agi::fs::path &file, int &out_count) {
+	CFURLRef url = MakeFileURL(file);
+	if (!url) {
+		out_count = 0;
+		return false;
+	}
+
+	CFErrorRef err = nullptr;
+	const bool ok = CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess, &err);
+	if (err) CFRelease(err);
+	CFRelease(url);
+
+	// CoreText registers a whole file at once and reports no face count
+	out_count = ok ? 1 : 0;
+	ProbeLog("Register",
+		wxString::Format("path=%s count=%d success=%d",
+			file.string(), out_count, ok ? 1 : 0).ToStdString());
+	return ok;
+}
+
+void UnregisterFontFile(const agi::fs::path &file) {
+	CFURLRef url = MakeFileURL(file);
+	if (!url) return;
+	CTFontManagerUnregisterFontsForURL(url, kCTFontManagerScopeProcess, nullptr);
+	CFRelease(url);
+}
+#else
+// No process-scoped font registration API available; fontconfig would be needed
+bool RegisterFontFile(const agi::fs::path &file, int &out_count) {
+	out_count = 0;
+	ProbeLog("Register",
+		wxString::Format("path=%s unsupported on this platform", file.string()).ToStdString());
+	return false;
+}
+
+void UnregisterFontFile(const agi::fs::path &) {}
+#endif
 } // namespace
 
 void SetProbeEnabled(const bool enable) {

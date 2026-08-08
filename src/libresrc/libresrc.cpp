@@ -30,6 +30,7 @@ extern "C" UINT WINAPI GetDpiForSystem(void);
 #include <wx/intl.h>
 #include <wx/mstream.h>
 
+#ifdef _WIN32
 // 检查操作系统版本
 bool IsWindows10OrGreater() {
 	OSVERSIONINFOEXW osvi = {sizeof(osvi), 10, 0, 0, 0, {}, 0, 0};
@@ -51,21 +52,31 @@ float getScaleFactor() {
 		return static_cast<float>(static_cast<double>(GetDpiForSystem()) / 96.0);
 	return 1;
 }
+#else
+// On non-Windows platforms (macOS/GTK) wx handles HiDPI scaling itself
+float getScaleFactor() { return 1; }
+#endif
 
 wxBitmap libresrc_getimage(const unsigned char *buff, size_t size, double scale, int dir) {
 	wxMemoryInputStream mem(buff, size);
 	const auto wx_image = wxImage(mem);
 	wxBitmap wx_bitmap;
 	const float scaleFactor = getScaleFactor();
+	(void)scaleFactor;
 	if (dir != wxLayout_RightToLeft) {
 		wx_bitmap = wxBitmap(wx_image, wxBITMAP_SCREEN_DEPTH, scale);
+#ifdef _WIN32
+		// GetGDIImageData is wxMSW-only
 		if (scaleFactor > 1.5f)
 			wx_bitmap.GetGDIImageData()->SetSize(wx_image.GetWidth() / 2, wx_image.GetHeight() / 2);
+#endif
 		return wx_bitmap;
 	}
 	wx_bitmap = wxBitmap(wx_image.Mirror(), wxBITMAP_SCREEN_DEPTH, scale);
+#ifdef _WIN32
 	if (scaleFactor > 1.5f)
 		wx_bitmap.GetGDIImageData()->SetSize(wx_image.GetWidth() / 2, wx_image.GetHeight() / 2);
+#endif
 	return wx_bitmap;
 }
 

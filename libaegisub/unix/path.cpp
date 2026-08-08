@@ -69,13 +69,13 @@ std::string exe_dir() {
 namespace agi {
 void Path::FillPlatformSpecificPaths() {
 #ifndef __APPLE__
-	std::filesystem::path home = home_dir();
+	agi::fs::path home = home_dir();
 	SetToken("?user", home/".aegisub");
 	SetToken("?local", home/".aegisub");
 
 #ifdef APPIMAGE_BUILD
-	std::filesystem::path exe = exe_dir();
-	std::filesystem::path data_from_bin = std::filesystem::path(P_DATA).lexically_relative(P_BIN);
+	agi::fs::path exe = exe_dir();
+	agi::fs::path data_from_bin = agi::fs::path(agi::fs::path(P_DATA).lexically_relative(P_BIN));
 	SetToken("?data", (exe != "" ? exe/data_from_bin : home/".aegisub").make_preferred());
 #else
 	SetToken("?data", P_DATA);
@@ -83,13 +83,13 @@ void Path::FillPlatformSpecificPaths() {
 	SetToken("?dictionary", "/usr/share/hunspell");
 
 #else
-	std::filesystem::path app_support = agi::util::GetApplicationSupportDirectory();
+	agi::fs::path app_support = agi::util::GetApplicationSupportDirectory();
 	SetToken("?user", app_support/"Aegisub");
 	SetToken("?local", app_support/"Aegisub");
 	SetToken("?data", agi::util::GetBundleSharedSupportDirectory());
 	SetToken("?dictionary", Decode("?data/dictionaries"));
 #endif
-	SetToken("?temp", std::filesystem::temp_directory_path());
+	SetToken("?temp", agi::fs::path(std::filesystem::temp_directory_path()));
 }
 
 }

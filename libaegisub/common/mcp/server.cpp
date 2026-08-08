@@ -417,6 +417,10 @@ std::string MakeHttpResponse(int status, std::string const& body, std::string co
 static std::string EnsureUtf8(std::string const& body) {
 	if (body.empty()) return body;
 
+#ifndef _WIN32
+	// On non-Windows platforms (macOS / Linux) the system encoding is UTF-8 already
+	return body;
+#else
 	// 先尝试以 UTF-8 解码，成功则说明 body 已是 UTF-8
 	int len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, body.data(), (int)body.size(), nullptr, 0);
 	if (len > 0) return body;
@@ -434,6 +438,7 @@ static std::string EnsureUtf8(std::string const& body) {
 	std::string utf8(static_cast<size_t>(len), '\0');
 	WideCharToMultiByte(CP_UTF8, 0, wstr.data(), (int)wstr.size(), &utf8[0], len, nullptr, nullptr);
 	return utf8;
+#endif
 }
 
 /// 处理一个 HTTP 连接：读取请求，派发 JSON-RPC，返回响应
