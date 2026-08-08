@@ -21,6 +21,7 @@
 
 #include <boost/locale/boundary.hpp>
 #include <boost/locale/conversion.hpp>
+#include <boost/locale/generator.hpp>
 #include <boost/locale/util.hpp>
 #include <boost/range/distance.hpp>
 #include <ctime>
@@ -174,6 +175,23 @@ void tagless_find_helper::map_range(size_t &s, size_t &e) {
 	}
 }
 
+// Every facet category except collation.
+//
+// Boost.Locale's collation facet is backed by ICU, and libc++'s std::regex
+// decides whether two characters form a digraph (a multi-character collating
+// element, like Czech "ch") by inspecting the length of the key that
+// std::collate::transform() returns. That heuristic is calibrated for the
+// platform's own collate implementation; against ICU sort keys it misfires and
+// makes the engine treat ordinary pairs such as "0}" as a single collating
+// element, consuming one character too many. Nothing here needs locale-aware
+// collation in the global locale — the one place that does (sorting the
+// automation menu) builds a collating locale of its own.
+static std::locale GenerateLocale(const char *id) {
+	boost::locale::generator gen;
+	gen.categories(boost::locale::all_categories ^ boost::locale::category_t::collation);
+	return gen.generate(id);
+}
+
 void InitLocale() {
 	auto id = boost::locale::util::get_system_locale(true);
 	UErrorCode err = U_ZERO_ERROR;
@@ -181,7 +199,7 @@ void InitLocale() {
 	if (U_FAILURE(err)) throw InternalError(u_errorName(err));
 
 	// Try to get the UTF-8 version of the current locale
-	auto locale = boost::locale::generator().generate("");
+	auto locale = GenerateLocale("");
 
 	// Check if we actually got a UTF-8 locale
 	using codecvt = std::codecvt<wchar_t, char, std::mbstate_t>;
@@ -200,7 +218,7 @@ void InitLocale() {
 	// If we didn't get a UTF-8 locale, force it to a known one
 	// FIXME: Should the ICU locale also be forced to en_US here?
 	if (result != std::codecvt_base::ok)
-		locale = boost::locale::generator().generate("en_US.UTF-8");
+		locale = GenerateLocale("en_US.UTF-8");
 	std::locale::global(locale);
 }
 } // namespace util
