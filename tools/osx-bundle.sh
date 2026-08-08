@@ -53,7 +53,9 @@ echo
 echo "---- Installing files ----"
 CURRENT_DIR=`pwd`
 cd ${BUILD_DIR}
-meson install --skip-subprojects luajit
+# Subprojects are statically linked into Aegisub; installing them would
+# write to the system prefix instead of the bundle
+meson install --skip-subprojects
 cd ${CURRENT_DIR}
 
 echo
@@ -103,16 +105,19 @@ mkdir -vp "${PKG_DIR}/Contents/Resources/en.lproj"
 
 echo
 echo "---- Fixing libraries ----"
-sudo python3 "${SRC_DIR}/tools/osx-fix-libs.py" "${PKG_DIR}/Contents/MacOS/aegisub" || exit $?
+# The bundle lives in the build tree, so no privilege escalation is needed
+python3 "${SRC_DIR}/tools/osx-fix-libs.py" "${PKG_DIR}/Contents/MacOS/Aegisub" || exit $?
 
 echo
 echo "---- Resigning ----"
 # After bundling and rewriting dylib paths we need to resign everything.
-if codesign -d "${PKG_DIR}/Contents/MacOS/aegisub"; then
-  for fname in "${PKG_DIR}/Contents/MacOS/"*; do
-    codesign -s ${AEGISUB_BUNDLE_SIGNATURE:--} -vf "${fname}"
-  done
-fi
+# Nested code must be signed before the bundle that contains it, otherwise
+# the outer signature is invalidated by the inner ones.
+for fname in "${PKG_DIR}/Contents/MacOS/"*.dylib; do
+  test -f "${fname}" || continue
+  codesign -s ${AEGISUB_BUNDLE_SIGNATURE:--} -vf "${fname}"
+done
+codesign -s ${AEGISUB_BUNDLE_SIGNATURE:--} -vf "${PKG_DIR}"
 
 echo
 echo "Done creating \"${PKG_DIR}\""
