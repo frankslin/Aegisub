@@ -40,6 +40,7 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/range/algorithm_ext/push_back.hpp>
 #include <boost/locale/collator.hpp>
+#include <boost/locale/generator.hpp>
 #include <vector>
 #include <wx/frame.h>
 #include <wx/menu.h>
@@ -430,7 +431,15 @@ class AutomationMenu final : public wxMenu {
 			if (command) return;
 			for (auto &sub : subitems)
 				sub.Sort();
-			auto comp = boost::locale::comparator<std::string::value_type>();
+			// The global locale is generated without the collation category (see
+			// agi::util::InitLocale), so build a collating one here instead of
+			// relying on std::locale().
+			static const std::locale collate_locale = [] {
+				boost::locale::generator gen;
+				gen.categories(boost::locale::category_t::collation);
+				return gen.generate("");
+			}();
+			auto comp = boost::locale::comparator<std::string::value_type>(collate_locale);
 			std::sort(subitems.begin(), subitems.end(), [&](WorkItem const &a, WorkItem const &b){
 				return comp(a.displayname, b.displayname);
 			});
