@@ -61,12 +61,18 @@ tests_src = [
 	'tests/audit_fixes.cpp',
 	'tests/style_rename.cpp',
 	'tests/font_chooser.cpp',
-	'tests/font_resource_probe.cpp',
 	'tests/option_liststring_probe.cpp',
 	'tests/ui_regression_audit.cpp',
 	'tests/image_video.cpp',
 	'tests/version_check.cpp',
 ]
+
+# Pure Win32 GDI probe: checks whether fonts registered with
+# AddFontResourceEx(FR_PRIVATE) show up in the font enumeration API.
+# There is no equivalent on other platforms.
+if host_machine.system() == 'windows'
+	tests_src += ['tests/font_resource_probe.cpp']
+endif
 
 # TextFileWriter 源文件（需要从主项目引入）
 text_file_writer_src = [
