@@ -26,7 +26,7 @@ if host_machine.system() == 'windows'
 else
   conf_platform_json = configure_file(input: 'default_config_platform.json.in',
                                       output: '@BASENAME@',
-                                      configuration: conf_platform)
+                                      configuration: conf_meson)
 endif
 
 if host_machine.system() == 'darwin'

@@ -22,6 +22,24 @@ mimalloc_static_src = files(
 	'src/threadlocal.c',
 	'src/prim/prim.c'
 )
+
+# MSVC and gcc/clang use different argument syntax; pick per compiler
+if meson.get_compiler('c').get_argument_syntax() == 'msvc'
+	mimalloc_args = [
+		'/DWIN32',
+		'/D_WINDOWS',
+		'/GR',
+		'/EHsc',
+		'/Ob2',
+		'/DNDEBUG',
+		'-MD',
+		'/Zc:__cplusplus',
+		'-DMI_STATIC_LIB'
+	]
+else
+	mimalloc_args = ['-DNDEBUG', '-DMI_STATIC_LIB']
+endif
+
 mimalloc_static = static_library(
 	'mimalloc_static',
 	mimalloc_static_src,
@@ -29,32 +47,11 @@ mimalloc_static = static_library(
 	link_args : [],
 	link_with : [],
 	include_directories : mimalloc_static_inc,
-	install : true,
+	install : false,
 	override_options : ['cpp_std=c++17'],
 	objects : [],
-	install_dir : 'lib/mimalloc-3',
-	cpp_args : [
-		'/DWIN32',
-		'/D_WINDOWS',
-		'/GR',
-		'/EHsc',
-		'/Ob2',
-		'/DNDEBUG',
-		'-MD',
-		'/Zc:__cplusplus',
-		'-DMI_STATIC_LIB'
-	],
-	c_args : [
-		'/DWIN32',
-		'/D_WINDOWS',
-		'/GR',
-		'/EHsc',
-		'/Ob2',
-		'/DNDEBUG',
-		'-MD',
-		'/Zc:__cplusplus',
-		'-DMI_STATIC_LIB'
-	],
+	cpp_args : mimalloc_args,
+	c_args : mimalloc_args,
 	pic : false
 )
 mimalloc_static_dep = declare_dependency(
