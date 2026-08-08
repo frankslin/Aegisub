@@ -230,13 +230,20 @@ else
 	endif
 endif
 
-# ICU 数据库（子项目构建时需要，系统 ICU 自带数据则无需）
+deps += dependency('icu-uc', allow_fallback : true, version : '>=4.8.1.1')
+deps += dependency('icu-i18n', allow_fallback : true, version : '>=4.8.1.1')
+
+# ICU database: needed when ICU is built as a subproject, but a system ICU
+# ships its own data. Must be queried after icu-uc so the subproject that
+# overrides this dependency has already been configured.
 icu_data_dep = dependency('icu-data', required : false)
 if icu_data_dep.found()
 	deps += icu_data_dep
 endif
-deps += dependency('icu-uc', allow_fallback : true, version : '>=4.8.1.1')
-deps += dependency('icu-i18n', allow_fallback : true, version : '>=4.8.1.1')
+
+# Used directly by the style editor (FreeType) and utils.cpp (HarfBuzz)
+deps += dependency('freetype2', allow_fallback : true)
+deps += dependency('harfbuzz', allow_fallback : true)
 
 foreach dep : [
 	# audio, in order of precedence
@@ -495,13 +502,30 @@ if host_machine.system() == 'windows'
 	link_depends += manifest_file
 endif
 
-configure_file(copy : true, input : 'gifski/lib/gifski.lib', output : 'gifski.lib')
-configure_file(copy : true, input : 'libimagequant/lib/imagequant_sys.lib', output : 'imagequant_sys.lib')
-# 创建依赖项
-other_dep = declare_dependency(
-	include_directories : ['gifski/inc', 'libimagequant/inc'],
-	link_args : ['gifski.lib', 'imagequant_sys.lib', '-luserenv', '-lntdll']
-)
+if host_machine.system() == 'windows'
+	configure_file(copy : true, input : 'gifski/lib/gifski.lib', output : 'gifski.lib')
+	configure_file(copy : true, input : 'libimagequant/lib/imagequant_sys.lib', output : 'imagequant_sys.lib')
+	# 创建依赖项
+	other_dep = declare_dependency(
+		include_directories : ['gifski/inc', 'libimagequant/inc'],
+		link_args : ['gifski.lib', 'imagequant_sys.lib', '-luserenv', '-lntdll']
+	)
+else
+	# On non-Windows, link libgifski.a (build it with `cargo build --release --lib`
+	# in a gifski checkout and drop the result into gifski/lib/). imagequant is
+	# already linked into that archive, so no separate library is needed.
+	gifski_lib = cc.find_library('gifski',
+								 dirs : [meson.current_source_dir() / 'gifski/lib'],
+								 static : true,
+								 required : false)
+	if not gifski_lib.found()
+		error('gifski/lib/libgifski.a not found; GIF export needs it on this platform')
+	endif
+	other_dep = declare_dependency(
+		include_directories : ['gifski/inc', 'libimagequant/inc'],
+		dependencies : gifski_lib
+	)
+endif
 
 aegisub = executable('Aegisub', aegisub_src, version_h, acconf, resrc,
 					 link_with : [libresrc, libluabins, libaegisub],
@@ -519,31 +543,51 @@ aegisub = executable('Aegisub', aegisub_src, version_h, acconf, resrc,
 # 注：run_command的CWD为源码目录，故需使用绝对路径
 cube_src_dir = meson.project_source_root() / 'src' / 'cube'
 cube_dst_dir = meson.project_build_root() / 'data' / 'cube'
-run_command(powershell_exe, '-Command',
-  'New-Item -ItemType Directory -Force "' + cube_dst_dir + '" | Out-Null',
-  check: false)
-foreach cube_file : ['PQ2SDR.cube', 'HLG2SDR.cube', 'DV2SDR.cube']
+if host_machine.system() == 'windows'
   run_command(powershell_exe, '-Command',
-    'Copy-Item -Force "' + cube_src_dir / cube_file + '" "' + cube_dst_dir / cube_file + '"',
+    'New-Item -ItemType Directory -Force "' + cube_dst_dir + '" | Out-Null',
     check: false)
-endforeach
+  foreach cube_file : ['PQ2SDR.cube', 'HLG2SDR.cube', 'DV2SDR.cube']
+    run_command(powershell_exe, '-Command',
+      'Copy-Item -Force "' + cube_src_dir / cube_file + '" "' + cube_dst_dir / cube_file + '"',
+      check: false)
+  endforeach
+else
+  run_command('mkdir', '-p', cube_dst_dir, check: false)
+  foreach cube_file : ['PQ2SDR.cube', 'HLG2SDR.cube', 'DV2SDR.cube']
+    run_command('cp', '-f', cube_src_dir / cube_file, cube_dst_dir / cube_file, check: false)
+  endforeach
+endif
+# Runtime data root. On macOS, Contents/MacOS may only hold Mach-O code or
+# codesign rejects the bundle, so data goes to Contents/SharedSupport (?data).
+if host_machine.system() == 'darwin' and get_option('build_osx_bundle')
+	runtime_datadir = dataroot
+else
+	runtime_datadir = bindir / 'data'
+endif
+
 # 安装HDR/DV色彩映射所需的3D LUT文件
 install_data('src/cube/PQ2SDR.cube',
-             install_dir : bindir / 'data' / 'cube')
+             install_dir : runtime_datadir / 'cube')
 install_data('src/cube/HLG2SDR.cube',
-             install_dir : bindir / 'data' / 'cube')
+             install_dir : runtime_datadir / 'cube')
 install_data('src/cube/DV2SDR.cube',
-             install_dir : bindir / 'data' / 'cube')
+             install_dir : runtime_datadir / 'cube')
 
 # 构建时复制VSFilterMod标签文档到构建目录data/，确保dev运行时可找到
 vsmod_doc_src = meson.project_source_root() / 'docs' / 'AssRocket-VSFilterMod-使用文档.md'
 vsmod_doc_dst = meson.project_build_root() / 'data' / 'AssRocket-VSFilterMod-使用文档.md'
-run_command(powershell_exe, '-Command',
-  'New-Item -ItemType Directory -Force "' + meson.project_build_root() / 'data' + '" | Out-Null',
-  check: false)
-run_command(powershell_exe, '-Command',
-  'Copy-Item -Force "' + vsmod_doc_src + '" "' + vsmod_doc_dst + '"',
-  check: false)
+if host_machine.system() == 'windows'
+  run_command(powershell_exe, '-Command',
+    'New-Item -ItemType Directory -Force "' + meson.project_build_root() / 'data' + '" | Out-Null',
+    check: false)
+  run_command(powershell_exe, '-Command',
+    'Copy-Item -Force "' + vsmod_doc_src + '" "' + vsmod_doc_dst + '"',
+    check: false)
+else
+  run_command('mkdir', '-p', meson.project_build_root() / 'data', check: false)
+  run_command('cp', '-f', vsmod_doc_src, vsmod_doc_dst, check: false)
+endif
 # 安装VSFilterMod标签文档，供MCP vsmod_syntax工具查询
 install_data('docs/AssRocket-VSFilterMod-使用文档.md',
-             install_dir : bindir / 'data')
+             install_dir : runtime_datadir)
